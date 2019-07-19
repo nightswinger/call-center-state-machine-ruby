@@ -1,0 +1,62 @@
+service: call-center-state-machine
+
+provider:
+  name: aws
+  region: us-west-1
+  runtime: ruby2.5
+
+plugins:
+  - serverless-step-functions
+  - serverless-pseudo-parameters
+
+functions:
+  openCaseFunc:
+    handler: handlers/open_case.handler
+  assignCaseFunc:
+    handler: handlers/assign_case.handler
+  workOnCaseFunc:
+    handler: handlers/work_on_case.handler
+  closeCaseFunc:
+    handler: handlers/close_case.handler
+  escalateCaseFunc:
+    handler: handlers/escalate_case.handler
+
+stepFunctions:
+  stateMachines:
+    callCenterStateMachine:
+      definition:
+        Comment: 'A simple AWS Step Functions state machine that automates a call center support session.'
+        StartAt: OpenCase
+        States:
+          OpenCase:
+            Type: Task
+            Resource: "arn:aws:lambda:#{AWS::Region}:#{AWS::AccountId}:function:${self:service}-${self:stage, 'dev'}-openCaseFunc"
+            Next: AssignCase
+          AssignCase:
+            Type: Task
+            Resource: "arn:aws:lambda:#{AWS::Region}:#{AWS::AccountId}:function:${self:service}-${self:stage, 'dev'}-assignCaseFunc"
+            Next: WorkOnCase
+          WorkOnCase:
+            Type: Task
+            Resource: "arn:aws:lambda:#{AWS::Region}:#{AWS::AccountId}:function:${self:service}-${self:stage, 'dev'}-workOnCaseFunc"
+            Next: IsCaseResolved
+          IsCaseResolved:
+            Type: Choice
+            Choices:
+              - Variable: '$.Status'
+                NumericEquals: 1
+                Next: CloseCase
+              - Variable: '$.Status'
+                NumericEquals: 0
+                Next: EscalateCase
+          CloseCase:
+            Type: Task
+            Resource: "arn:aws:lambda:#{AWS::Region}:#{AWS::AccountId}:function:${self:service}-${self:stage, 'dev'}-closeCaseFunc"
+            End: true
+          EscalateCase:
+            Type: Task
+            Resource: "arn:aws:lambda:#{AWS::Region}:#{AWS::AccountId}:function:${self:service}-${self:stage, 'dev'}-escalateCaseFunc"
+            Next: Fail
+          Fail:
+            Type: Fail
+            Cause: 'Engage Tier 2 Support.'
